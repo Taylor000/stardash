@@ -203,6 +203,7 @@ create table if not exists api_tokens (
 
 // Append-only. Each entry runs once, in order, when user_version is below its index + 1.
 const MIGRATIONS: string[] = [
+  // Existing entries remain append-only; personal library migration is at the end.
   // 1: releases inbox. Releases are global per repo; "seen" is per user.
   `create table repo_releases (
     repo_id text not null references repos(id) on delete cascade,
@@ -226,6 +227,24 @@ const MIGRATIONS: string[] = [
     unique (user_id, collection_id),
     unique (user_id, list_id)
   );`,
+  `alter table repos add column github_created_at text;
+   alter table repos add column github_updated_at text;
+   alter table repos add column is_fork integer not null default 0;
+   create table library_batches (
+     id text primary key, user_id text not null references profiles(id),
+     status text not null default 'queued', idempotency_key text not null,
+     created_at text not null, updated_at text not null,
+     unique(user_id,idempotency_key)
+   );
+   create table library_batch_items (
+     batch_id text not null references library_batches(id) on delete cascade,
+     github_repo_id text not null, snapshot_json text not null,
+     status text not null default 'pending', attempts integer not null default 0,
+     lease_until integer not null default 0, next_attempt_at integer not null default 0,
+     error text, primary key(batch_id,github_repo_id)
+   );
+   create index library_batch_pending on library_batch_items(status,next_attempt_at,lease_until);
+   create table library_locks(name text primary key, expires_at integer not null);`,
 ]
 
 function open() {

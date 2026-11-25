@@ -156,6 +156,9 @@ export function upsertStarredRepos(repos: StarredRepo[], userId: string): void {
         updated_at: nowIso(),
       }) as { id: string }
       upsertUserStar.run(userId, repoId, repo.starredAt)
+      db.prepare("update repos set github_created_at=?, github_updated_at=?, is_fork=? where id=?").run(
+        repo.createdAt??null,repo.updatedAt??null,repo.fork?1:0,repoId,
+      )
     }
     // Drop stars the user no longer has.
     db.prepare(

@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "StarDash - Your GitHub Stars, Organized",
+  title: "StarDash · 我的收藏库",
   description:
-    "A personal developer dashboard that transforms your GitHub starred repositories into an organized, searchable, and AI-enhanced workspace.",
+    "查看、排序和批量管理自己的 GitHub 收藏。",
   generator: "v0.app",
   icons: {
     icon: [
@@ -31,10 +31,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1a1a" },
-  ],
+  themeColor: "#fafafa",
 }
 
 export default function RootLayout({
@@ -44,15 +41,15 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${geist.variable} ${geistMono.variable} dark`}
+      lang="zh-CN"
+      className={`${geist.variable} ${geistMono.variable} light`}
       suppressHydrationWarning
     >
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem
+          defaultTheme="light"
+          enableSystem={false}
           storageKey="stardash-theme"
         >
           <MotionProvider>

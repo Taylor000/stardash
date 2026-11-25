@@ -1,4 +1,4 @@
-import { StarredRepo, LANGUAGE_COLORS } from "./types"
+import { type StarredRepo, LANGUAGE_COLORS } from "./types"
 
 interface GitHubRepo {
   id: number
@@ -21,6 +21,9 @@ interface GitHubRepo {
   pushed_at: string
   html_url: string
   archived: boolean
+  created_at?: string
+  updated_at?: string
+  fork?: boolean
 }
 
 // When using application/vnd.github.star+json, the response wraps repo in an object
@@ -42,6 +45,7 @@ export async function fetchStarredRepos(
         Accept: "application/vnd.github.star+json", // This header returns starred_at timestamp
         "X-GitHub-Api-Version": "2022-11-28",
       },
+      signal: AbortSignal.timeout(20000),
     },
   )
 
@@ -71,6 +75,9 @@ export async function fetchStarredRepos(
     openIssuesCount: item.repo.open_issues_count,
     pushedAt: item.repo.pushed_at,
     starredAt: item.starred_at,
+    createdAt: item.repo.created_at ?? null,
+    updatedAt: item.repo.updated_at ?? null,
+    fork: item.repo.fork ?? false,
     avatarUrl: item.repo.owner.avatar_url,
     // User-specific data (will be stored in DB later)
     status: null,
@@ -89,18 +96,18 @@ export async function fetchAllStarredRepos(accessToken: string): Promise<Starred
   const allRepos: StarredRepo[] = []
   let page = 1
   let hasMore = true
+  const deadline=Date.now()+480000
 
   while (hasMore) {
+    if(Date.now()>deadline)throw Error("GitHub full sync timed out; previous snapshot retained")
     const { repos, hasMore: more } = await fetchStarredRepos(accessToken, page, 100)
     allRepos.push(...repos)
     hasMore = more
     page++
 
-    // Safety limit to prevent infinite loops
-    if (page > 50) break
   }
 
-  return allRepos
+  return Array.from(new Map(allRepos.map(repo => [repo.id, repo])).values())
 }
 
 // Fetch star count for a specific repo (lightweight, no auth required for public repos)

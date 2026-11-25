@@ -17,12 +17,15 @@ import { StarredRepo, STATUS_LABELS } from "@/lib/types"
 import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useEffect, useState } from "react"
-import { useDraggable } from "@dnd-kit/core"
+import { displayDate } from "@/lib/personal-library"
+import { zhCN } from "date-fns/locale"
 
 interface RepoCardProps {
   repo: StarredRepo
   onClick: () => void
   onRemoveStar?: (repo: StarredRepo) => void
+  selected?: boolean
+  onSelect?: () => void
 }
 
 function formatNumber(num: number): string {
@@ -32,25 +35,28 @@ function formatNumber(num: number): string {
   return num.toString()
 }
 
-export function RepoCard({ repo, onClick, onRemoveStar }: RepoCardProps) {
+export function RepoCard({ repo, onClick, onRemoveStar,selected,onSelect }: RepoCardProps) {
   const statusConfig = repo.status ? STATUS_LABELS[repo.status] : null
   const [timeString, setTimeString] = useState("recently")
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: repo.id })
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTimeString(formatDistanceToNow(new Date(repo.pushedAt), { addSuffix: true }))
+    setTimeString(Number.isFinite(Date.parse(repo.pushedAt))?formatDistanceToNow(new Date(repo.pushedAt), { addSuffix: true,locale:zhCN }):"未知")
   }, [repo.pushedAt])
 
   return (
-    <div ref={setNodeRef} className={cn("h-full", isDragging && "opacity-40")}>
+    <div className="h-full">
       <Card
         className={cn(
           "group relative cursor-pointer transition-all duration-200 h-full py-0 overflow-hidden",
           "hover:border-muted-foreground/30 hover:bg-card/80",
           "border-border bg-card",
+          selected && "ring-2 ring-emerald-600 border-emerald-600",
         )}
         onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e=>{if(e.target===e.currentTarget&&(e.key==="Enter"||e.key===" ")){e.preventDefault();onClick()}}}
       >
         <CardContent className="p-4 h-full flex flex-col">
           {/* Header */}
@@ -73,13 +79,7 @@ export function RepoCard({ repo, onClick, onRemoveStar }: RepoCardProps) {
               </div>
               {repo.isPinned && <Pin className="h-3 w-3 text-accent fill-accent" />}
               {/* Drag handle and menu - hidden by default, show on hover */}
-              <button
-                {...listeners}
-                {...attributes}
-                onClick={(e) => e.stopPropagation()}
-                className="h-6 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
-                aria-label="Drag to assign"
-              >
+              {onSelect ? <input type="checkbox" aria-label={`选择 ${repo.fullName}`} checked={selected??false} onClick={e=>e.stopPropagation()} onChange={onSelect} className="size-4 cursor-pointer accent-emerald-700"/> : <button onClick={e=>{e.stopPropagation();onClick()}} aria-label="查看项目详情" className="size-6 text-muted-foreground">
                 <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
                   <circle cx="5" cy="4" r="1.5" />
                   <circle cx="11" cy="4" r="1.5" />
@@ -88,36 +88,37 @@ export function RepoCard({ repo, onClick, onRemoveStar }: RepoCardProps) {
                   <circle cx="5" cy="12" r="1.5" />
                   <circle cx="11" cy="12" r="1.5" />
                 </svg>
-              </button>
+              </button>}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 flex opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+                    className="h-7 w-7 flex"
+                    aria-label={`项目操作 ${repo.fullName}`}
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onClick}>
                     <StickyNote className="mr-2 h-4 w-4" />
-                    Add Note
+                    查看 / 编辑备注
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onClick}>
                     <FolderPlus className="mr-2 h-4 w-4" />
-                    Add to Collection
+                    管理分类与标签
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onClick}>
                     <Pin className="mr-2 h-4 w-4" />
-                    {repo.isPinned ? "Unpin" : "Pin"}
+                    {repo.isPinned ? "查看重点收藏" : "标记重点"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-destructive"
                     onSelect={() => onRemoveStar?.(repo)}
                   >
-                    Remove Star
+                    取消收藏
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -127,7 +128,7 @@ export function RepoCard({ repo, onClick, onRemoveStar }: RepoCardProps) {
           {/* Description - fixed height area */}
           <div className="mt-3 flex-1 min-h-[2.75rem]">
             <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-              {repo.description || "No description available"}
+              {repo.description || "暂无项目描述"}
             </p>
           </div>
 
@@ -172,7 +173,7 @@ export function RepoCard({ repo, onClick, onRemoveStar }: RepoCardProps) {
           {/* Footer - always at bottom */}
           <div className="mt-4 pt-3 border-t border-border/50">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 {repo.language && (
                   <div className="flex items-center gap-1.5">
                     <span
@@ -205,8 +206,10 @@ export function RepoCard({ repo, onClick, onRemoveStar }: RepoCardProps) {
             {/* Last Updated */}
             <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground/60">
               <Clock className="h-3 w-3" />
-              <span>Updated {timeString}</span>
+              <span>推送：{timeString}</span>
             </div>
+            <div className="mt-1 text-xs text-muted-foreground">收藏：{displayDate(repo.starredAt)}</div>
+            {repo.notes&&<p className="mt-2 line-clamp-1 text-xs text-muted-foreground" title={repo.notes}>备注：{repo.notes}</p>}
           </div>
         </CardContent>
       </Card>

@@ -4,6 +4,7 @@ import { db, fromJson, nowIso } from "@/lib/db"
 import { fetchAllStarredRepos } from "@/lib/github"
 import { getValidGitHubToken } from "@/lib/tokens"
 import { upsertStarredRepos } from "@/lib/user-metadata"
+import { acquireStarSync,releaseStarSync } from "@/lib/library-batches"
 import type { StarredRepo } from "@/lib/types"
 
 export const maxDuration = 60
@@ -31,6 +32,9 @@ interface StoredRow {
   readme: string | null
   updated_at: string
   starred_at: string | null
+  github_created_at: string | null
+  github_updated_at: string | null
+  is_fork: number
   status: StarredRepo["status"]
   is_pinned: number
   notes: string | null
@@ -41,7 +45,7 @@ function fetchStoredStarredRepos(userId: string): StarredRepo[] {
     .prepare(
       `select r.github_repo_id, r.owner, r.name, r.full_name, r.description, r.language, r.language_color, r.topics,
               r.homepage, r.license, r.stargazers_count, r.forks_count, r.open_issues_count, r.pushed_at, r.avatar_url,
-              r.archived, r.readme, r.updated_at, usr.starred_at, usr.status, usr.is_pinned, usr.notes
+              r.archived, r.readme, r.updated_at, r.github_created_at, r.github_updated_at, r.is_fork, usr.starred_at, usr.status, usr.is_pinned, usr.notes
        from user_starred_repos usr join repos r on r.id = usr.repo_id
        where usr.user_id = ? order by usr.starred_at desc`,
     )
@@ -61,8 +65,11 @@ function fetchStoredStarredRepos(userId: string): StarredRepo[] {
     stargazersCount: r.stargazers_count,
     forksCount: r.forks_count,
     openIssuesCount: r.open_issues_count,
-    pushedAt: r.pushed_at ?? r.updated_at,
-    starredAt: r.starred_at ?? r.updated_at,
+    pushedAt: r.pushed_at ?? "",
+    starredAt: r.starred_at ?? "",
+    createdAt: r.github_created_at,
+    updatedAt: r.github_updated_at,
+    fork: r.is_fork === 1,
     avatarUrl: r.avatar_url ?? "",
     status: r.status ?? null,
     isPinned: r.is_pinned === 1,
@@ -102,6 +109,7 @@ export async function GET(request: Request) {
   }
   let userId: string | null = null
   let lastSyncedAt: string | null = null
+  let syncLocked=false
 
   try {
     const user = await getUser()
@@ -113,6 +121,8 @@ export async function GET(request: Request) {
       .get(user.id) as
       { last_github_sync_at: string | null; total_starred_count: number } | undefined
     lastSyncedAt = profile?.last_github_sync_at ?? null
+    if(searchParams.get("cache")==="local")return storedReposResponse(user.id,lastSyncedAt,{allowEmpty:true})!
+    if(db.prepare("select 1 from library_batches where user_id=? and status in ('queued','running','paused')").get(user.id))return storedReposResponse(user.id,lastSyncedAt,{allowEmpty:true})!
 
     if (cacheMode === "prefer" && isFresh(lastSyncedAt)) {
       const cached = storedReposResponse(user.id, lastSyncedAt, {
@@ -149,6 +159,8 @@ export async function GET(request: Request) {
       )
     }
 
+    syncLocked=acquireStarSync(user.id)
+    if(!syncLocked)return storedReposResponse(user.id,lastSyncedAt,{allowEmpty:true})!
     const startedAt = Date.now()
     console.info("[github-star-sync:start]", { ...syncLog, userId: user.id })
 
@@ -189,5 +201,5 @@ export async function GET(request: Request) {
       )
     }
     return NextResponse.json({ error: "Failed to fetch starred repos" }, { status: 500 })
-  }
+  }finally{if(syncLocked&&userId)releaseStarSync(userId)}
 }

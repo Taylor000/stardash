@@ -5,6 +5,8 @@ import { GitHubIcon } from "@/components/icons/github-icon"
 import { PatLoginForm } from "@/components/pat-login-form"
 import { getGitHubApp } from "@/lib/github-app"
 import { safeNext } from "@/lib/safe-next"
+import { getUser } from "@/lib/auth"
+import { redirect } from "next/navigation"
 
 const ERRORS: Record<string, string> = {
   state: "That sign-in link expired. Try again.",
@@ -19,6 +21,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>
 }) {
   const { next: rawNext, error } = await searchParams
+  if(await getUser())redirect("/dashboard")
   const next = safeNext(rawNext)
   const configured = Boolean(getGitHubApp())
   const connectHref = `/api/auth/github/${configured ? "start" : "setup"}?next=${encodeURIComponent(next)}`
@@ -30,11 +33,11 @@ export default async function LoginPage({
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <GitHubIcon className="h-6 w-6" />
           </div>
-          <CardTitle className="text-2xl">Sign in to StarDash</CardTitle>
+          <CardTitle className="text-2xl">我的收藏库</CardTitle>
           <CardDescription>
             {configured
-              ? "Authorize the GitHub App this instance owns."
-              : "StarDash will create a GitHub App owned by you, on your account. No third party is ever in the loop."}
+              ? "登录后查看、排序和批量管理 GitHub 收藏。"
+              : "连接自己的 GitHub 账号，开始整理收藏。"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -46,7 +49,7 @@ export default async function LoginPage({
           <Button className="w-full" asChild>
             <a href={connectHref}>
               <GitHubIcon className="h-4 w-4" />
-              {configured ? "Continue with GitHub" : "Connect GitHub"}
+              {configured ? "使用 GitHub 登录" : "连接 GitHub"}
             </a>
           </Button>
           <PatLoginForm next={next} />

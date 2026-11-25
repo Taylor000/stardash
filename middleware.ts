@@ -5,6 +5,9 @@ import { SESSION_COOKIE } from "@/lib/session-cookie"
 // No "already has a cookie" redirect away from /auth/login: a stale cookie must still be able to reach the form.
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  if(pathname.startsWith("/api/")&&!/^\/api\/(auth\/|library\/|user\/metadata$|github\/(starred|readme)$|health$)/.test(pathname))return NextResponse.json({error:"Not found"},{status:404})
+  if(/^\/api\/(ai|ask|search|radar|intel|mcp|tokens|test-observability|cron)(\/|$)/.test(pathname))return NextResponse.json({error:"Not found"},{status:404})
+  if(/^\/(search|radar|trending|intel|contribute|recently-viewed)(\/|$)/.test(pathname))return NextResponse.redirect(new URL("/dashboard",request.url))
   const isProtected =
     !pathname.startsWith("/auth") && !pathname.startsWith("/api") && pathname !== "/"
   if (isProtected && !request.cookies.get(SESSION_COOKIE)?.value) {

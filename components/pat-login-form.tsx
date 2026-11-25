@@ -23,7 +23,7 @@ export function PatLoginForm({ next }: { next: string }) {
         onClick={() => setOpen(true)}
         className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
       >
-        Paste a personal access token instead
+        或使用个人访问令牌登录
       </button>
     )
   }
@@ -64,11 +64,11 @@ export function PatLoginForm({ next }: { next: string }) {
       )}
       <Button type="submit" variant="secondary" className="w-full" disabled={busy || !token}>
         {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-        Sign in with token
+        使用令牌登录
       </Button>
       <p className="text-center text-xs text-muted-foreground">
         <a href={PAT_URL} target="_blank" rel="noreferrer" className="underline">
-          Create a token
+          创建个人访问令牌
         </a>{" "}
         with <code>public_repo</code>, <code>read:user</code>, <code>read:org</code>.
       </p>

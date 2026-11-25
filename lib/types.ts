@@ -61,6 +61,9 @@ export interface StarredRepo {
   openIssuesCount: number
   pushedAt: string
   starredAt: string
+  createdAt?: string | null
+  updatedAt?: string | null
+  fork?: boolean
   avatarUrl: string
   status: RepoStatus
   isPinned: boolean
