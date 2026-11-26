@@ -18,10 +18,11 @@ const ERRORS: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>
+  searchParams: Promise<{ next?: string; error?: string; reauth?: string }>
 }) {
-  const { next: rawNext, error } = await searchParams
-  if(await getUser())redirect("/dashboard")
+  const { next: rawNext, error, reauth } = await searchParams
+  const replacing = reauth === "1"
+  if ((await getUser()) && !replacing) redirect("/dashboard")
   const next = safeNext(rawNext)
   const configured = Boolean(getGitHubApp())
   const connectHref = `/api/auth/github/${configured ? "start" : "setup"}?next=${encodeURIComponent(next)}`
@@ -33,11 +34,15 @@ export default async function LoginPage({
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <GitHubIcon className="h-6 w-6" />
           </div>
-          <CardTitle className="text-2xl">我的收藏库</CardTitle>
+          <CardTitle className="text-2xl">
+            {replacing ? "更新 GitHub 授权" : "我的收藏库"}
+          </CardTitle>
           <CardDescription>
-            {configured
-              ? "登录后查看、排序和批量管理 GitHub 收藏。"
-              : "连接自己的 GitHub 账号，开始整理收藏。"}
+            {replacing
+              ? "当前授权被 GitHub 拒绝取消收藏时，可改用经典个人访问令牌。原账号、收藏及批量任务都会保留。"
+              : configured
+                ? "登录后查看、排序和批量管理 GitHub 收藏。"
+                : "连接自己的 GitHub 账号，开始整理收藏。"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -46,13 +51,23 @@ export default async function LoginPage({
               <AlertCircle className="h-4 w-4" /> {ERRORS[error] ?? error}
             </p>
           )}
-          <Button className="w-full" asChild>
-            <a href={connectHref}>
-              <GitHubIcon className="h-4 w-4" />
-              {configured ? "使用 GitHub 登录" : "连接 GitHub"}
+          {!replacing && (
+            <Button className="w-full" asChild>
+              <a href={connectHref}>
+                <GitHubIcon className="h-4 w-4" />
+                {configured ? "使用 GitHub 登录" : "连接 GitHub"}
+              </a>
+            </Button>
+          )}
+          <PatLoginForm next={next} initialOpen={replacing} />
+          {replacing && (
+            <a
+              href="/dashboard"
+              className="block text-center text-sm text-muted-foreground hover:underline"
+            >
+              返回收藏库
             </a>
-          </Button>
-          <PatLoginForm next={next} />
+          )}
         </CardContent>
       </Card>
     </main>

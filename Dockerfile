@@ -10,7 +10,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 # Call next directly: .npmrc pins a Node for pnpm scripts, the image's Node 24 is what we want.
-RUN node node_modules/next/dist/bin/next build
+RUN NODE_OPTIONS=--max-old-space-size=1024 node node_modules/next/dist/bin/next build
 
 FROM base AS runner
 WORKDIR /app

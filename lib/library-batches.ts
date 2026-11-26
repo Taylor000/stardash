@@ -169,16 +169,25 @@ export function listBatchSummaries(userId: string) {
     completed: number
     failed: number
   }[]
-  return rows.map((row) => ({
-    ...row,
-    errors: (
+  return rows.map((row) => {
+    const authError = db
+      .prepare(
+        "select error from library_batch_items where batch_id=? and status='pending' and error like ? order by rowid limit 1",
+      )
+      .get(row.id, "GitHub 授权%") as { error: string } | undefined
+    const errors = (
       db
         .prepare(
           "select error from library_batch_items where batch_id=? and error is not null order by rowid limit 3",
         )
         .all(row.id) as { error: string }[]
-    ).map((r) => r.error),
-  }))
+    ).map((r) => r.error)
+    return {
+      ...row,
+      errors: [...new Set([...(authError ? [authError.error] : []), ...errors])].slice(0, 3),
+      reauthRequired: row.status === "paused" && Boolean(authError),
+    }
+  })
 }
 export function createUnstarBatch(
   userId: string,
@@ -290,9 +299,55 @@ function finalizeBatches() {
 }
 class GithubFailure extends Error {
   response: Response
-  constructor(response: Response) {
+  operation: string
+  constructor(response: Response, operation: string) {
     super(`GitHub ${response.status}`)
     this.response = response
+    this.operation = operation
+  }
+}
+async function githubFailureInfo(error: GithubFailure) {
+  const res = error.response
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as { message?: unknown } | null
+  const message = typeof body?.message === "string" ? body.message : ""
+  const limited =
+    res.status === 429 ||
+    (res.status === 403 &&
+      (res.headers.get("x-ratelimit-remaining") === "0" ||
+        res.headers.has("retry-after") ||
+        /secondary rate limit|rate limit exceeded|abuse detection/i.test(message)))
+  const reauth =
+    res.status === 401 ||
+    (res.status === 403 &&
+      !limited &&
+      /resource not accessible by (integration|personal access token)|insufficient[_ ]scope|insufficient permissions?|requires?.*(authentication|permission)/i.test(
+        message,
+      ))
+  let retryAfter = Number(res.headers.get("retry-after") ?? 0) * 1000
+  if (!Number.isFinite(retryAfter))
+    retryAfter = Math.max(0, Date.parse(res.headers.get("retry-after") ?? "") - Date.now()) || 0
+  const primaryReset =
+    res.headers.get("x-ratelimit-remaining") === "0"
+      ? Math.max(0, Number(res.headers.get("x-ratelimit-reset") ?? 0) * 1000 - Date.now()) || 0
+      : 0
+  return {
+    limited,
+    reauth,
+    waitMs: Math.max(limited ? 60000 : 0, retryAfter, primaryReset),
+    message: reauth
+      ? res.status === 401
+        ? "GitHub 授权已失效，请重新授权后继续任务。"
+        : error.operation === "取消收藏"
+          ? "GitHub 授权不足，无法取消收藏。需要 Starring（读写）权限，请重新授权或更换个人访问令牌后继续任务。"
+          : `GitHub 授权不足，无法${error.operation}。请重新授权 GitHub 后继续任务。`
+      : limited
+        ? "GitHub 暂时限制请求频率，任务稍后将自动重试。"
+        : res.status === 403
+          ? `GitHub 拒绝${error.operation}（403），请检查仓库访问限制。`
+          : `GitHub ${error.operation}失败（${res.status}）。`,
   }
 }
 /** One claimed item per invocation. Requests never rely on an HTTP response staying open. */
@@ -385,7 +440,7 @@ export async function processBatchItem({
       })
     // Resolve renames by immutable repository id, and verify accessibility before interpreting 404.
     const repoResponse = await request(`/repositories/${item.github_repo_id}`)
-    if (!repoResponse.ok) throw new GithubFailure(repoResponse)
+    if (!repoResponse.ok) throw new GithubFailure(repoResponse, "读取仓库")
     const repo = (await repoResponse.json()) as {
       id: number
       owner: { login: string }
@@ -400,8 +455,8 @@ export async function processBatchItem({
         return true
       }
       const response = await request(path, "DELETE")
-      if (response.status !== 204) throw new GithubFailure(response)
-    } else if (state.status !== 404) throw new GithubFailure(state)
+      if (response.status !== 204) throw new GithubFailure(response, "取消收藏")
+    } else if (state.status !== 404) throw new GithubFailure(state, "检查收藏状态")
     db.exec("begin immediate")
     try {
       // Snapshot already committed before any GitHub write. Recovered items reconcile remotely first.
@@ -419,27 +474,21 @@ export async function processBatchItem({
     }
   } catch (error) {
     const res = error instanceof GithubFailure ? error.response : null
-    const message = res ? `GitHub 返回 ${res.status}` : "网络或本地写入失败，重试前将核对收藏状态"
-    const limited =
-      res &&
-      (res.status === 429 ||
-        (res.status === 403 &&
-          (res.headers.get("x-ratelimit-remaining") === "0" || res.headers.has("retry-after"))))
+    const info = error instanceof GithubFailure ? await githubFailureInfo(error) : null
+    const message = info?.message ?? "网络或本地写入失败，重试前将核对收藏状态"
+    const limited = info?.limited ?? false
     if (isCancelled()) {
       if ((!res || res.status >= 500 || limited) && item.attempts < 2) {
         update("running", message, Date.now() + 60000)
       } else update("failed", message)
-    } else if (res?.status === 401) {
-      update("pending", "GitHub 授权失效，请重新登录")
+    } else if (info?.reauth) {
+      update("pending", message)
       db.prepare("update library_batches set status='paused' where id=?").run(item.batch_id)
     } else if (limited || ((!res || res.status >= 500) && item.attempts < 2)) {
-      const retry = Number(res?.headers.get("retry-after") ?? 0) * 1000
-      const reset = Number(res?.headers.get("x-ratelimit-reset") ?? 0) * 1000 - Date.now()
       update(
         "pending",
         message,
-        Date.now() +
-          Math.max(5000 * 2 ** Math.min(item.attempts, 5), retry, reset, limited ? 60000 : 0),
+        Date.now() + Math.max(5000 * 2 ** Math.min(item.attempts, 5), info?.waitMs ?? 0),
       )
     } else update("failed", message)
   }

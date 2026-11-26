@@ -67,6 +67,7 @@ type Job = {
   completed: number
   failed: number
   errors: string[]
+  reauthRequired?: boolean
 }
 const statusLabels: Record<string, string> = {
   queued: "等待执行",
@@ -625,6 +626,19 @@ export function PersonalDashboard() {
                     {e}
                   </p>
                 ))}
+                {job.reauthRequired && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button size="sm" variant="outline" asChild>
+                      <a href="/auth/login?reauth=1&next=%2Fdashboard">更换授权（个人令牌）</a>
+                    </Button>
+                    <Button size="sm" variant="ghost" asChild>
+                      <a href="/api/auth/github/start?next=%2Fdashboard">重新授权 GitHub</a>
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      更新授权后点击“继续”，原来的选择和已完成进度会保留。
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
         </section>

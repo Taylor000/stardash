@@ -7,11 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
 const PAT_URL =
-  "https://github.com/settings/tokens/new?description=StarDash&scopes=public_repo,read:user,read:org"
+  "https://github.com/settings/tokens/new?description=StarDash&scopes=public_repo,read:user"
 
-export function PatLoginForm({ next }: { next: string }) {
+export function PatLoginForm({
+  next,
+  initialOpen = false,
+}: {
+  next: string
+  initialOpen?: boolean
+}) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initialOpen)
   const [token, setToken] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -68,9 +74,9 @@ export function PatLoginForm({ next }: { next: string }) {
       </Button>
       <p className="text-center text-xs text-muted-foreground">
         <a href={PAT_URL} target="_blank" rel="noreferrer" className="underline">
-          创建个人访问令牌
+          创建经典个人访问令牌
         </a>{" "}
-        with <code>public_repo</code>, <code>read:user</code>, <code>read:org</code>.
+        ，管理第三方公开项目请选择 <code>public_repo</code>，并保留 <code>read:user</code>。
       </p>
     </form>
   )

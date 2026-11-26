@@ -2,6 +2,7 @@ import { withSentryConfig } from "@sentry/nextjs"
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: { cpus: 1 },
   // ponytail: standalone is for the Docker image; Vercel's adapter chokes on it with Next 16.3+.
   output: process.env.VERCEL ? undefined : "standalone",
   typescript: {
