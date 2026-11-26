@@ -16,14 +16,16 @@ export function PersonalShell({ children }: { children: React.ReactNode }) {
             <Star className="size-5 text-emerald-700" />
             StarDash
           </Link>
-          <nav aria-label="主导航" className="flex gap-1 text-sm">
+          <nav aria-label="主导航" className="flex flex-wrap gap-1 text-sm">
             {[
               ["/dashboard", "收藏库"],
               ["/settings", "分类与标签"],
+              ["/tasks", "任务记录"],
             ].map(([href, label]) => (
               <Link
                 key={href}
                 href={href}
+                aria-current={path === href ? "page" : undefined}
                 className={`rounded-md px-3 py-2 ${path === href ? "bg-emerald-50 font-medium text-emerald-800" : "text-muted-foreground hover:bg-muted"}`}
               >
                 {label}
