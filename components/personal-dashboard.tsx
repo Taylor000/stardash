@@ -58,7 +58,7 @@ const DEFAULT: Filters = {
   tag: "",
   collection: "",
   sort: "starred-desc",
-  pageSize: 50,
+  pageSize: 100,
 }
 type Job = {
   id: string
@@ -164,9 +164,12 @@ export function PersonalDashboard() {
       setFilters((f) => ({
         ...f,
         sort: preferences.sort in LIBRARY_SORTS ? preferences.sort : f.sort,
-        pageSize: [20, 50, 100, 200].includes(preferences.pageSize)
-          ? preferences.pageSize
-          : f.pageSize,
+        pageSize:
+          preferences.pageSize === 50 && preferences.pageSizeVersion !== 2
+            ? 100
+            : [20, 50, 100, 200].includes(preferences.pageSize)
+              ? preferences.pageSize
+              : f.pageSize,
       }))
       if (preferences.view === "list" || preferences.view === "grid") setView(preferences.view)
     } catch {}
@@ -245,7 +248,7 @@ export function PersonalDashboard() {
       const next = { ...f, ...patch }
       localStorage.setItem(
         `stardash-personal-${user.id}`,
-        JSON.stringify({ sort: next.sort, pageSize: next.pageSize, view }),
+        JSON.stringify({ sort: next.sort, pageSize: next.pageSize, pageSizeVersion: 2, view }),
       )
       return next
     })
@@ -402,7 +405,12 @@ export function PersonalDashboard() {
                   setView(mode)
                   localStorage.setItem(
                     `stardash-personal-${user.id}`,
-                    JSON.stringify({ sort: filters.sort, pageSize: filters.pageSize, view: mode }),
+                    JSON.stringify({
+                      sort: filters.sort,
+                      pageSize: filters.pageSize,
+                      pageSizeVersion: 2,
+                      view: mode,
+                    }),
                   )
                 }}
               >
